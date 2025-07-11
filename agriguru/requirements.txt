@@ -1,0 +1,68 @@
+# Python dependencies for AgriGuru
+
+# Core
+python-dotenv>=1.0.0   # For loading .env files (config.py)
+requests>=2.31.0       # For making API calls (e.g., SoilGrids REST, Open-Meteo)
+
+# Data Handling & Numerics
+pandas>=1.3            # For data manipulation (especially in ML preprocessing)
+numpy>=1.20            # For numerical operations
+
+# Machine Learning (Scikit-learn based crop suitability)
+scikit-learn>=1.0      # For RandomForest/SVM, preprocessing, metrics
+joblib>=1.0            # For saving/loading scikit-learn models
+
+# NLP (Hugging Face Transformers for textual advice)
+# Note: 'torch' is a common backend for transformers. Alternatives like 'tensorflow' or 'jax' exist.
+# The Hugging Face pipeline will try to use GPU if torch detects CUDA.
+transformers[torch]>=4.0.0 # Using extras_require for torch with transformers
+# Alternatively, list torch separately:
+# transformers>=4.0.0
+# torch>=1.8.0
+
+# Soil Data Access (as per brief for SoilGrids)
+# soilDB can be complex to install due to GDAL dependencies on some systems.
+# Ensure GDAL is installed if using the soilDB parts that require it.
+# The current crop_data_fetcher uses a REST fallback for SoilGrids, making soilDB optional for that part.
+soilDB>=2.7.6          # As specified in the brief; check latest stable version.
+
+# --- Libraries for modules to be implemented later (as per full brief) ---
+# Weather Forecasting (beyond Open-Meteo if custom models are built)
+# xgboost
+# tensorflow # (if LSTM is chosen over scikit-learn's MLP or other options)
+
+# Market Price Analysis
+# beautifulsoup4 # For scraping Agmarknet if API is not available
+# scrapy # Alternative for more complex scraping
+# prophet # For price forecasting (formerly fbprophet)
+
+# Crop Health & Disease Detection
+# opencv-python # For image preprocessing
+# ultralytics # For YOLOv8 (contains torch, so no need to list torch again if this is used)
+# ViT is part of 'transformers'
+
+# Irrigation & Resource Management
+# PyETo # For evapotranspiration (Weather module)
+# PyTSEB # For evapotranspiration (Irrigation module)
+
+# Web Dashboard & Chatbot Backend
+# Flask # or FastAPI
+# Rasa
+
+# IoT & Edge
+# paho-mqtt # For MQTT communication
+
+# Database (beyond built-in sqlite3)
+# psycopg2-binary # For PostgreSQL (production database)
+# SQLAlchemy # ORM for database interaction (optional, but good for complex apps)
+
+# Other utilities that might be useful
+# Pillow # For image manipulation (often a dependency of vision models)
+# geopy # For geocoding if Open-Meteo's geocoder is not sufficient or for other tasks
+# google-cloud-translate # For Google Translate API (language_support.py)
+# earthengine-api # For Google Earth Engine (satellite_analyzer.py) - requires separate auth setup
+# sentinelhub # For Sentinel Hub API (alternative for satellite_analyzer.py)
+
+# Note: Some libraries like TensorFlow or PyTorch can be large.
+# For edge deployment, consider TensorFlow Lite or PyTorch Mobile.
+# Ensure versions are compatible. Pinning versions is good practice for reproducibility.
