@@ -1,13 +1,13 @@
 # AgriGuru: Intelligent Agricultural Advisory System 🌾
 
-AgriGuru is a prototype Streamlit application designed to provide intelligent agricultural advice to farmers. It aims to offer personalized crop recommendations, weather forecasts, market insights, and information on sustainable farming practices, leveraging AI capabilities.
+AgriGuru is a prototype Streamlit application designed to provide intelligent agricultural advice to farmers. It aims to offer personalized crop recommendations, weather forecasts, market insights, and information on sustainable farming practices, leveraging AI capabilities (now powered by OpenAI).
 
 ## Features
 
-*   **Crop Recommendations:** Get suggestions for crops based on location, soil type, and other environmental factors (uses Gemini API).
+*   **Crop Recommendations:** Get suggestions for crops based on location, soil type, and other environmental factors (uses OpenAI API - GPT-3.5 Turbo).
 *   **Weather Forecast:** Access real-time weather forecasts for your region using the Open-Meteo API. Automatically geocodes location names.
-*   **Market Insights:** Obtain US agricultural market price information from the USDA NASS API. Falls back to Gemini for general insights if the USDA key is unavailable.
-*   **Sustainable Farming Practices:** Ask questions and get advice on sustainable agriculture (uses Gemini API).
+*   **Market Insights:** Obtain US agricultural market price information from the USDA NASS API. Falls back to OpenAI (GPT-3.5 Turbo) for general insights if the USDA key is unavailable.
+*   **Sustainable Farming Practices:** Ask questions and get advice on sustainable agriculture (uses OpenAI API - GPT-3.5 Turbo).
 
 ## Setup and Installation
 
@@ -31,17 +31,17 @@ AgriGuru is a prototype Streamlit application designed to provide intelligent ag
     2.  Open the `.env` file and add your API keys:
 
         ```env
-        GEMINI_API_KEY="YOUR_ACTUAL_GEMINI_API_KEY"
+        OPENAI_API_KEY="YOUR_ACTUAL_OPENAI_API_KEY"
         USDA_API_KEY="YOUR_ACTUAL_USDA_NASS_API_KEY"
         ```
-    *   **`GEMINI_API_KEY`**: Obtain this from [Google AI Studio](https://aistudio.google.com/app/apikey). This is used for crop recommendations, sustainable farming advice, and as a fallback for market insights if the USDA key is not provided.
+    *   **`OPENAI_API_KEY`**: Obtain this from [OpenAI Platform](https://platform.openai.com/api-keys). This is used for crop recommendations, sustainable farming advice, and as a fallback for market insights if the USDA key is not provided. The application primarily uses the GPT-3.5 Turbo model.
     *   **`USDA_API_KEY`**: Obtain this from the [USDA NASS QuickStats API website](https://quickstats.nass.usda.gov/api) (it's free). This is used for the "Market Insights" section to fetch agricultural price data (primarily US-focused).
 
-    If the `GEMINI_API_KEY` is not provided or is invalid, the AI-powered features will use mocked responses or show an error.
-    If the `USDA_API_KEY` is not provided, the "Market Insights" section will attempt to use Gemini Pro for general insights or show a warning.
+    If the `OPENAI_API_KEY` is not provided or is invalid, the AI-powered features will use mocked responses or show an error.
+    If the `USDA_API_KEY` is not provided, the "Market Insights" section will attempt to use OpenAI (GPT-3.5 Turbo) for general insights or show a warning.
 
     *   **Streamlit Secrets (Alternative for deployed apps)**:
-        If deploying to Streamlit Community Cloud, you can set these as secrets in your app's settings instead of using a `.env` file. The environment variable names (`GEMINI_API_KEY`, `USDA_API_KEY`) remain the same.
+        If deploying to Streamlit Community Cloud, you can set these as secrets in your app's settings instead of using a `.env` file. The environment variable names (`OPENAI_API_KEY`, `USDA_API_KEY`) remain the same.
 
 ## Running the Application
 
@@ -55,12 +55,12 @@ AgriGuru is a prototype Streamlit application designed to provide intelligent ag
 
 ## Using the App
 
-*   **Crop Recommendations:** Provide location, soil type, average rainfall, and temperature to get crop suggestions.
+*   **Crop Recommendations:** Provide location, soil type, average rainfall, and temperature to get crop suggestions from OpenAI.
 *   **Weather Forecast:** Enter a city or region name. The app uses the Open-Meteo API to fetch current weather and a 7-day forecast. It automatically converts the location name to latitude/longitude. No separate API key is needed for this feature as implemented.
-*   **Market Insights:** Select or enter a commodity name (e.g., "CORN", "SOYBEANS"), year, and optionally a US state to get price data from the USDA NASS API. If the USDA API key is not configured, it may fall back to Gemini for general insights.
-*   **Sustainable Farming Practices:** Ask questions in the text area to get advice on sustainable agriculture.
+*   **Market Insights:** Select or enter a commodity name (e.g., "CORN", "SOYBEANS"), year, and optionally a US state to get price data from the USDA NASS API. If the USDA API key is not configured, it may fall back to OpenAI for general insights.
+*   **Sustainable Farming Practices:** Ask questions in the text area to get advice on sustainable agriculture from OpenAI.
 
-**Note:** Functionality requiring API keys will be limited or use mocked/fallback data if keys are missing or invalid. Check the application's warnings if you encounter issues.
+**Note:** Functionality requiring API keys will be limited or use mocked/fallback data if keys are missing or invalid. Check the application's warnings if you encounter issues. The AI responses are powered by OpenAI's GPT-3.5 Turbo model.
 
 ## Future Development Ideas
 

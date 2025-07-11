@@ -1,34 +1,35 @@
 import streamlit as st
-import google.generativeai as genai
 import os
 import requests # For Open-Meteo API
 from dotenv import load_dotenv
 import datetime # For formatting dates
+import openai # For OpenAI API
 
 # Load environment variables from .env file
 load_dotenv()
 
-# --- Gemini Pro API Configuration ---
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# --- OpenAI API Configuration ---
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai_client = None
+OPENAI_AVAILABLE = False
 
-if GEMINI_API_KEY:
+if OPENAI_API_KEY:
     try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel('gemini-1.0-pro') # Updated model name
-        GEMINI_AVAILABLE = True
+        openai_client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        OPENAI_AVAILABLE = True
+        # You can add a test call here if needed, e.g., list models, but it might incur costs or slow down startup.
+        # st.success("OpenAI client configured successfully.")
     except Exception as e:
-        st.error(f"Error configuring Gemini API: {e}")
-        gemini_model = None
-        GEMINI_AVAILABLE = False
+        st.error(f"Error configuring OpenAI client: {e}")
+        openai_client = None
+        OPENAI_AVAILABLE = False
 else:
     st.warning("""
-    Gemini API key not found.
+    OpenAI API key not found.
     Please create a `.env` file in the root directory and add your API key like this:
-    `GEMINI_API_KEY="YOUR_API_KEY_HERE"`
+    `OPENAI_API_KEY="YOUR_API_KEY_HERE"`
     The app will use mocked responses for AI features.
     """)
-    gemini_model = None
-    GEMINI_AVAILABLE = False
 
 # --- USDA NASS API Configuration & Functions ---
 USDA_API_KEY = os.getenv("USDA_API_KEY")
@@ -176,29 +177,36 @@ WEATHER_CODES = {
     99: "⛈️ Thunderstorm with heavy hail",
 }
 
-def get_gemini_response(prompt_text):
+def get_openai_response(prompt_text, model="gpt-3.5-turbo"):
     """
-    Sends a prompt to Gemini Pro and returns the response.
-    Uses a mocked response if the API is not available.
+    Sends a prompt to the OpenAI API and returns the response.
+    Uses a mocked response if the API is not available or if openai_client is None.
     """
-    if GEMINI_AVAILABLE and gemini_model:
+    if OPENAI_AVAILABLE and openai_client:
         try:
-            response = gemini_model.generate_content(prompt_text)
-            return response.text
+            completion = openai_client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a helpful agricultural advisor providing concise and practical advice."},
+                    {"role": "user", "content": prompt_text}
+                ]
+            )
+            return completion.choices[0].message.content
         except Exception as e:
-            return f"Error communicating with Gemini API: {e}"
+            st.error(f"Error communicating with OpenAI API: {e}")
+            return "OpenAI API Error: Could not retrieve a response." # Provide a fallback error message
     else:
-        # Mocked response
+        # Mocked response if OpenAI is not available
+        # These mocks can be made more specific to the type of prompt if needed
+        mock_message = "(Mocked Response - OpenAI API key missing or invalid)"
         if "crop recommendation" in prompt_text.lower():
-            return "Mocked response: Based on your input, consider planting Tomatoes or Corn."
-        elif "weather forecast" in prompt_text.lower():
-            return "Mocked response: Sunny with a high of 25°C."
-        elif "market insights" in prompt_text.lower():
-            return "Mocked response: Prices for Wheat are currently stable."
+            return f"Consider planting Carrots or Spinach in suitable conditions. {mock_message}"
+        elif "market insights" in prompt_text.lower(): # Fallback for USDA
+            return f"Market trends suggest investing in alternative grains. {mock_message}"
         elif "sustainable farming" in prompt_text.lower():
-            return "Mocked response: Consider using cover crops and no-till farming."
+            return f"Implementing crop rotation and water conservation techniques is beneficial. {mock_message}"
         else:
-            return "Mocked response: Unable to generate a response for this query."
+            return f"Specific advice unavailable without API access. {mock_message}"
 
 def main():
     st.set_page_config(page_title="AgriGuru", layout="wide")
@@ -236,7 +244,7 @@ def main():
             if location:
                 prompt = f"Provide crop recommendations for a location like {location} with {soil_type} soil. Average annual rainfall is {avg_rainfall}mm and average growing season temperature is {avg_temp}°C. Focus on suitability and yield."
                 with st.spinner("Fetching recommendations..."):
-                    recommendations = get_gemini_response(prompt)
+                    recommendations = get_openai_response(prompt)
                     st.subheader("Recommended Crops:")
                     st.markdown(recommendations)
             else:
@@ -312,7 +320,7 @@ def main():
         st.write("Access agricultural market price information from the USDA NASS Quick Stats API.")
 
         if not USDA_API_AVAILABLE:
-            st.warning("USDA API Key not found in `.env` file. This section requires a valid API key from USDA NASS to function. Market insights from Gemini will be used as a fallback if available.")
+            st.warning("USDA API Key not found in `.env` file. This section requires a valid API key from USDA NASS to function. Market insights from OpenAI will be used as a fallback if available.")
 
         # Common US commodities for easier selection
         common_commodities = ["CORN", "SOYBEANS", "WHEAT", "COTTON", "RICE", "SORGHUM", "BARLEY", "OATS", "APPLES", "GRAPES", "POTATOES", "CATTLE", "HOGS", "CHICKENS"]
@@ -350,18 +358,18 @@ def main():
                         st.error("Failed to retrieve data. Check API key or network.")
                     # else: market_data is an empty list, message already handled by get_usda_market_data or above
 
-                elif GEMINI_AVAILABLE: # Fallback to Gemini if USDA key missing but Gemini is available
-                    st.info("USDA API Key not available. Attempting to get general market insights using Gemini Pro...")
+                elif OPENAI_AVAILABLE: # Fallback to OpenAI if USDA key missing but OpenAI is available
+                    st.info("USDA API Key not available. Attempting to get general market insights using OpenAI...")
                     prompt = f"Provide general market insights for {final_commodity_name}"
                     if state_alpha:
-                        prompt += f" in {state_alpha}"
+                        prompt += f" in {state_alpha} (US state)" # Clarify context for OpenAI
                     prompt += f" for the year {year}."
-                    with st.spinner("Fetching insights with Gemini..."):
-                        insights = get_gemini_response(prompt)
-                        st.subheader(f"General Market Insights for {final_commodity_name} (from Gemini):")
+                    with st.spinner("Fetching insights with OpenAI..."):
+                        insights = get_openai_response(prompt)
+                        st.subheader(f"General Market Insights for {final_commodity_name} (from OpenAI):")
                         st.markdown(insights)
                 else: # Neither API is available
-                    st.error("Both USDA and Gemini API keys are unavailable. Cannot fetch market insights.")
+                    st.error("Both USDA and OpenAI API keys are unavailable. Cannot fetch market insights.")
             else:
                 st.error("Please enter a commodity name and year.")
 
@@ -375,7 +383,7 @@ def main():
             if sustainable_query:
                 prompt = f"Regarding sustainable farming, what about: {sustainable_query}?"
                 with st.spinner("Fetching advice..."):
-                    advice = get_gemini_response(prompt)
+                    advice = get_openai_response(prompt)
                     st.subheader("Sustainable Farming Advice:")
                     st.markdown(advice)
             else:
