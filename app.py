@@ -177,6 +177,118 @@ WEATHER_CODES = {
     99: "⛈️ Thunderstorm with heavy hail",
 }
 
+# --- ISRIC SoilGrids API Functions ---
+def get_soil_data(latitude, longitude):
+    """
+    Fetches soil data from ISRIC SoilGrids REST API for a given latitude and longitude.
+    Retrieves properties like pH, organic carbon, clay/sand/silt content, CEC, and bulk density.
+    """
+    if latitude is None or longitude is None:
+        return None
+
+    # Define the properties and depths we are interested in
+    # Properties: phh2o, soc, clay, sand, silt, cec, bdod
+    # Depths: 0-5cm (or a suitable single depth)
+    # ISRIC uses specific naming for depths, e.g., 0-5cm is "0-5cm", 5-15cm is "5-15cm"
+    # For simplicity, we'll target a common surface layer, e.g., 0-30cm if available or average of top layers.
+    # The REST API seems to prefer querying one property at a time or specific layers.
+    # Let's try to get a few key properties at a common topsoil depth.
+    # Documentation: https://rest.soilgrids.org/soilgrids/v2.0/docs #/default/query_layer_query_layer_get
+
+    base_url = "https://rest.soilgrids.org/soilgrids/v2.0/properties/query"
+    properties_to_fetch = {
+        "phh2o": "pH water",
+        "soc": "Soil Organic Carbon",
+        "clay": "Clay Content",
+        "sand": "Sand Content",
+        "silt": "Silt Content",
+        "cec": "Cation Exchange Capacity",
+        "bdod": "Bulk Density"
+    }
+    depth_interval = "0-30cm_mean" # Example: mean value for 0-30cm depth. Or use "0-5cm_mean", "5-15cm_mean" etc.
+                                 # The API expects specific depth intervals like "d_0_5", "d_5_15" etc.
+                                 # Let's use specific layers and take the mean of the top ones if direct 0-30cm is not simple.
+                                 # The API allows querying for depths like '0-5cm', '5-15cm', '15-30cm'.
+                                 # We will query for these and report them.
+
+    soil_results = {}
+
+    # ISRIC API expects lon, lat order for point queries
+    params = {
+        "lon": longitude,
+        "lat": latitude,
+        "depth_interval": "0-30cm", # This seems to be a valid interval for some queries
+    }
+
+    common_layers = ["0-5cm", "5-15cm", "15-30cm"] # Depths as per SoilGrids convention for "depths" parameter
+
+    for prop_code, prop_name in properties_to_fetch.items():
+        params_prop = {
+            "lon": longitude,
+            "lat": latitude,
+            "property": prop_code,
+            "depth": common_layers, # Request multiple depths
+            "value": "mean" # Request the mean value for the layers
+        }
+        try:
+            response = requests.get(base_url, params=params_prop)
+            response.raise_for_status()
+            data = response.json()
+
+            # st.json(data) # For debugging the structure
+
+            if "properties" in data and "layers" in data["properties"]:
+                # Extract values for each depth and store them
+                # The API returns values in the order of depths requested
+                layer_values = {}
+                for layer_info in data["properties"]["layers"]:
+                    if layer_info["name"] == prop_code:
+                        for i, depth_label_obj in enumerate(layer_info["depths"]):
+                            depth_label = depth_label_obj["label"]
+                            # Correctly access the mapped value, which might be under a "values" dict with "mean"
+                            value_data = layer_info["values"]["mean"] # if value="mean" was requested
+                            if i < len(value_data): # Ensure index exists
+                                # SoilGrids values are often multiplied by a factor (e.g., pH by 10, OC by 10 g/kg)
+                                # We need to convert them to standard units based on their documentation.
+                                val = value_data[i]
+                                if val is None: # Skip if value is None (e.g. water body)
+                                    continue
+
+                                converted_val = val
+                                unit = ""
+                                if prop_code == "phh2o": # pH x 10
+                                    converted_val = val / 10.0
+                                    unit = ""
+                                elif prop_code == "soc": #  g/kg (needs conversion factor if it's dg/kg or cg/kg)
+                                                     # SoilGrids provides soc in dg/kg. To get g/kg, divide by 10.
+                                                     # To get %, divide g/kg by 10. So dg/kg to % is divide by 100.
+                                    converted_val = val / 100.0 # dg/kg to %
+                                    unit = "%"
+                                elif prop_code in ["clay", "sand", "silt"]: # g/100g (already percentage)
+                                    converted_val = val / 10.0 # If values are in g/kg, convert to % (g/100g)
+                                    unit = "%"
+                                elif prop_code == "cec": # cmol(c)/kg (pH 7)
+                                    converted_val = val / 10.0 # If in mmol(c)/kg, convert to cmol(c)/kg
+                                    unit = "cmol(c)/kg"
+                                elif prop_code == "bdod": # cg/cm3. To get g/cm3 divide by 100
+                                    converted_val = val / 100.0
+                                    unit = "g/cm³"
+
+                                layer_values[depth_label] = f"{converted_val:.2f} {unit}".strip()
+                        soil_results[prop_name] = layer_values
+            else:
+                soil_results[prop_name] = "Not found or error in response structure"
+
+        except requests.exceptions.RequestException as e:
+            # st.error(f"Error fetching soil data for {prop_name}: {e}")
+            soil_results[prop_name] = "API request failed"
+        except Exception as e:
+            # st.error(f"Unexpected error processing soil data for {prop_name}: {e}")
+            soil_results[prop_name] = "Processing error"
+
+    return soil_results if soil_results else None
+
+
 def get_openai_response(prompt_text, model="gpt-3.5-turbo"):
     """
     Sends a prompt to the OpenAI API and returns the response.
@@ -196,201 +308,150 @@ def get_openai_response(prompt_text, model="gpt-3.5-turbo"):
             st.error(f"Error communicating with OpenAI API: {e}")
             return "OpenAI API Error: Could not retrieve a response." # Provide a fallback error message
     else:
-        # Mocked response if OpenAI is not available
-        # These mocks can be made more specific to the type of prompt if needed
-        mock_message = "(Mocked Response - OpenAI API key missing or invalid)"
-        if "crop recommendation" in prompt_text.lower():
-            return f"Consider planting Carrots or Spinach in suitable conditions. {mock_message}"
-        elif "market insights" in prompt_text.lower(): # Fallback for USDA
-            return f"Market trends suggest investing in alternative grains. {mock_message}"
-        elif "sustainable farming" in prompt_text.lower():
-            return f"Implementing crop rotation and water conservation techniques is beneficial. {mock_message}"
-        else:
-            return f"Specific advice unavailable without API access. {mock_message}"
+        # This part should ideally not be reached if OPENAI_AVAILABLE is false from the main logic,
+        # as the main logic checks OPENAI_AVAILABLE before calling this function.
+        # This is a defensive fallback in case this function is called directly when it shouldn't be.
+        return "OpenAI client is not available. Please ensure the API key is correctly configured. (This is a fallback message from get_openai_response)"
 
 def main():
-    st.set_page_config(page_title="AgriGuru", layout="wide")
+    st.set_page_config(page_title="AgriGuru Chat", layout="wide")
 
-    st.title("🌾 AgriGuru: Intelligent Agricultural Advisory System")
-    st.caption("Your AI-powered assistant for smarter farming decisions.")
+    st.title("🌾 AgriGuru: Your Agricultural Advisory Chatbot")
 
-    # Placeholder for different sections
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to", ["Crop Recommendations", "Weather Forecast", "Market Insights", "Sustainable Farming Practices"])
+    # Initialize session state for chat messages and user location if they don't exist
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+    if "user_location" not in st.session_state:
+        st.session_state.user_location = "" # Initialize user_location
 
-    if page == "Crop Recommendations":
-        st.header("🌱 Crop Recommendations")
-        st.write("Get personalized crop recommendations based on your local conditions.")
+    # Sidebar for location input
+    with st.sidebar:
+        st.header("Your Location")
+        current_location_placeholder = "Not set"
+        if st.session_state.user_location:
+            current_location_placeholder = st.session_state.user_location
 
-        col1, col2 = st.columns(2)
-        with col1:
-            location = st.text_input("Enter your location (e.g., city, region):", key="crop_location")
-        with col2:
-            soil_type = st.selectbox(
-                "Select soil type:",
-                ["Loamy", "Sandy", "Clay", "Silty", "Peaty", "Chalky"],
-                key="soil_type"
-            )
-
-        # Placeholder for more specific data inputs (simulating satellite/sensor data)
-        st.subheader("Optional: Additional Data")
-        col3, col4 = st.columns(2)
-        with col3:
-            avg_rainfall = st.slider("Average Annual Rainfall (mm):", 0, 4000, 1000, key="avg_rainfall")
-        with col4:
-            avg_temp = st.slider("Average Growing Season Temperature (°C):", -10, 40, 20, key="avg_temp")
-
-        if st.button("Get Crop Recommendations", key="crop_rec_button"):
-            if location:
-                prompt = f"Provide crop recommendations for a location like {location} with {soil_type} soil. Average annual rainfall is {avg_rainfall}mm and average growing season temperature is {avg_temp}°C. Focus on suitability and yield."
-                with st.spinner("Fetching recommendations..."):
-                    recommendations = get_openai_response(prompt)
-                    st.subheader("Recommended Crops:")
-                    st.markdown(recommendations)
+        loc_input = st.text_input("Enter your Village/Town, District:", value=st.session_state.user_location, key="location_input_field")
+        if st.button("Set Location", key="set_location_button"):
+            if loc_input:
+                st.session_state.user_location = loc_input
+                st.success(f"Location set to: {st.session_state.user_location}")
             else:
-                st.error("Please enter a location.")
+                st.warning("Please enter a location.")
 
-    elif page == "Weather Forecast":
-        st.header("🌦️ Weather Forecast")
-        st.write("Access real-time weather forecasts for your region using Open-Meteo.")
+        st.caption(f"Current context location: {current_location_placeholder}")
+        st.markdown("---")
+        st.info("Ask AgriGuru anything about farming!")
 
-        weather_location_input = st.text_input("Enter city or region for weather forecast:", key="weather_location_input")
+    # Display chat messages from history on app rerun
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-        if st.button("Get Weather Forecast", key="weather_button"):
-            if weather_location_input:
-                with st.spinner(f"Fetching coordinates for {weather_location_input}..."):
-                    lat, lon, loc_name = get_coordinates_for_location(weather_location_input)
+    # Accept user input
+    if prompt := st.chat_input("What would you like to know?"):
+        # Add user message to chat history
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        # Display user message in chat message container
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-                if lat and lon:
-                    st.write(f"Found coordinates for {loc_name}: Latitude {lat:.2f}, Longitude {lon:.2f}")
-                    with st.spinner(f"Fetching weather forecast for {loc_name}..."):
-                        forecast_data = get_weather_forecast(lat, lon)
+        # --- This is where the new AI query processing logic will go ---
+        # For now, just a placeholder response
+        with st.chat_message("assistant"):
+            response = ""
+            if not st.session_state.user_location:
+                response = "Please set your location in the sidebar first so I can provide more relevant advice."
+                st.markdown(response) # Show the "Please set location" message
+            else:
+                # Main query processing logic starts here
+                user_query = prompt.lower() # For keyword matching
+                context_for_ai = f"User is in location: {st.session_state.user_location}. User's query: \"{prompt}\"\n"
+                api_data_summary = ""
 
-                    if forecast_data:
-                        st.subheader(f"Weather Forecast for {loc_name}")
-
-                        # Display Current Weather
-                        if "current" in forecast_data:
-                            current = forecast_data["current"]
-                            current_weather_desc = WEATHER_CODES.get(current.get("weather_code"), "N/A")
-                            st.markdown(f"**Now:** {current.get('temperature_2m')}°C, {current_weather_desc}, Wind: {current.get('wind_speed_10m')} km/h")
-
-                        # Display Daily Forecast
-                        if "daily" in forecast_data:
-                            st.markdown("**7-Day Forecast:**")
-                            daily = forecast_data["daily"]
-                            # Create a simpler table-like display
-                            header = "| Date       | Max Temp (°C) | Min Temp (°C) | Precipitation (mm) | Condition         |"
-                            separator = "|------------|---------------|---------------|--------------------|-------------------|"
-                            st.markdown(header)
-                            st.markdown(separator)
-
-                            for i in range(len(daily.get("time", []))):
-                                try:
-                                    date_str = daily["time"][i]
-                                    # Attempt to parse different date formats Open-Meteo might send
-                                    try:
-                                        date_obj = datetime.datetime.strptime(date_str, '%Y-%m-%d').strftime('%a, %b %d')
-                                    except ValueError:
-                                        date_obj = date_str # Keep original if parsing fails
-
-                                    max_temp = daily["temperature_2m_max"][i]
-                                    min_temp = daily["temperature_2m_min"][i]
-                                    precip = daily["precipitation_sum"][i]
-                                    condition_code = daily["weather_code"][i]
-                                    condition_desc = WEATHER_CODES.get(condition_code, "N/A")
-
-                                    row = f"| {date_obj:<10} | {max_temp:<13.1f} | {min_temp:<13.1f} | {precip:<18.1f} | {condition_desc:<17} |"
-                                    st.markdown(row)
-                                except IndexError:
-                                    st.caption(f"Could not display full data for day {i+1}")
-                                except Exception as e:
-                                    st.caption(f"Error processing daily forecast entry: {e}")
+                with st.spinner("Gathering information..."):
+                    # --- Weather Data Fetch ---
+                    if "weather" in user_query or "temperature" in user_query or "forecast" in user_query or "rain" in user_query:
+                        lat, lon, loc_name = get_coordinates_for_location(st.session_state.user_location)
+                        if lat and lon:
+                            weather_data = get_weather_forecast(lat, lon)
+                            if weather_data:
+                                current_weather_desc = "Weather data unavailable."
+                                if "current" in weather_data:
+                                    current = weather_data["current"]
+                                    weather_code_desc = WEATHER_CODES.get(current.get("weather_code"), "N/A")
+                                    current_weather_desc = (
+                                        f"Current weather in {loc_name}: {current.get('temperature_2m')}°C, "
+                                        f"{weather_code_desc}, Wind: {current.get('wind_speed_10m')} km/h."
+                                    )
+                                api_data_summary += current_weather_desc + "\n"
+                            else:
+                                api_data_summary += f"Could not fetch current weather data for {st.session_state.user_location}.\n"
                         else:
-                            st.write("Daily forecast data not available.")
-                    else:
-                        st.error("Could not retrieve weather forecast data.")
+                            api_data_summary += f"Could not find coordinates for weather for {st.session_state.user_location}.\n"
+
+                    # --- Soil Data Fetch ---
+                    if "soil" in user_query or "ph" in user_query or "clay" in user_query or "sand" in user_query or "organic carbon" in user_query:
+                        # Attempt to get coordinates again if not already fetched for weather (can be optimized)
+                        lat, lon, loc_name = get_coordinates_for_location(st.session_state.user_location) # Ensure loc_name is from here for soil context
+                        if lat and lon:
+                            soil_data = get_soil_data(lat, lon)
+                            if soil_data:
+                                soil_summary = f"Estimated soil properties for {loc_name}:\n"
+                                for prop, values_at_depths in soil_data.items():
+                                    if isinstance(values_at_depths, dict) and values_at_depths:
+                                        soil_summary += f"  {prop}:\n"
+                                        for depth, value in values_at_depths.items():
+                                            soil_summary += f"    {depth}: {value}\n"
+                                    elif isinstance(values_at_depths, str): # Error message for a property
+                                        soil_summary += f"  {prop}: {values_at_depths}\n"
+                                api_data_summary += soil_summary
+                            else:
+                                api_data_summary += f"Could not fetch soil data for {st.session_state.user_location}.\n"
+                        else:
+                            api_data_summary += f"Could not find coordinates for soil data for {st.session_state.user_location}.\n"
+
+                    # --- Market Data (USDA - if user specifically asks for US data or certain keywords) ---
+                    # This part is kept separate as it's US-specific and might not always be relevant
+                    # For Indian market insights, we will rely on OpenAI's general knowledge combined with location.
+                    if "usda" in user_query or ("market price" in user_query and ("united states" in user_query or "us market" in user_query)):
+                        # A more sophisticated keyword extraction for commodity and year would be needed here
+                        # For now, this is just a placeholder to show where it would fit.
+                        # Example: if user says "USDA price for corn in Iowa 2023"
+                        # commodity_match = re.search(r"(\w+)\s*(?:price|market)", user_query) # etc.
+                        # For now, we won't automatically call USDA unless explicitly asked in a very specific way.
+                        # The general market queries will be handled by OpenAI using the Indian location context.
+                        pass # Not implementing automatic USDA calls from general chat for now.
+
+                if api_data_summary:
+                    context_for_ai += "\nContextual Information from APIs:\n" + api_data_summary.strip() + "\n"
                 else:
-                    st.error(f"Could not find coordinates for '{weather_location_input}'. Please try a different location name.")
-            else:
-                st.error("Please enter a location for the weather forecast.")
+                    context_for_ai += "\nNo specific API data was automatically fetched for this query. Please rely on general knowledge.\n"
 
-    elif page == "Market Insights":
-        st.header("📈 Market Insights (USDA Data - US Only)")
-        st.write("Access agricultural market price information from the USDA NASS Quick Stats API.")
+                final_prompt_to_ai = (
+                    f"{context_for_ai}\n"
+                    "You are AgriGuru, an intelligent agricultural advisory chatbot. "
+                    "Based on the user's query and the provided contextual information (if any), "
+                    "give a helpful and comprehensive answer. If specific live data (like exact soil composition or "
+                    "hyper-local market prices for the user's village) is not available in the provided context, "
+                    "use your general knowledge to provide the best possible advice for the user's location and query. "
+                    "If you are using general knowledge for specifics like market prices or detailed soil data, "
+                    "you can briefly state that the information is based on general trends or typical conditions for the region if precise local data wasn't fetched."
+                )
 
-        if not USDA_API_AVAILABLE:
-            st.warning("USDA API Key not found in `.env` file. This section requires a valid API key from USDA NASS to function. Market insights from OpenAI will be used as a fallback if available.")
+                # st.info(f"DEBUG: Final prompt to AI:\n{final_prompt_to_ai}") # For debugging
 
-        # Common US commodities for easier selection
-        common_commodities = ["CORN", "SOYBEANS", "WHEAT", "COTTON", "RICE", "SORGHUM", "BARLEY", "OATS", "APPLES", "GRAPES", "POTATOES", "CATTLE", "HOGS", "CHICKENS"]
+                if OPENAI_AVAILABLE:
+                    with st.spinner("AgriGuru is thinking..."):
+                        ai_response_content = get_openai_response(final_prompt_to_ai)
+                        st.markdown(ai_response_content)
+                        response = ai_response_content # To be added to history
+                else:
+                    response = "OpenAI API key is not available. Cannot process your query with AI. (Mocked: Query understood, but AI is offline)"
+                    st.warning(response)
 
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            commodity_name = st.selectbox("Select or type Commodity:", options=[""] + common_commodities, key="usda_commodity", format_func=lambda x: "Select Commodity" if x == "" else x)
-            if not commodity_name: # Allow free text entry if not selected from dropdown
-                 commodity_name_input = st.text_input("Or Enter Commodity Name (e.g., CORN):", key="usda_commodity_text")
-                 if commodity_name_input: commodity_name = commodity_name_input #
-        with col2:
-            current_year = datetime.datetime.now().year
-            year = st.number_input("Enter Year:", min_value=1900, max_value=current_year + 1, value=current_year, key="usda_year")
-        with col3:
-            # List of US State abbreviations for dropdown
-            us_states = ["", "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA", "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ", "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT", "VA", "WA", "WV", "WI", "WY"]
-            state_alpha = st.selectbox("Select State (optional, for state-level data):", options=us_states, key="usda_state")
-
-        if st.button("Get USDA Market Data", key="usda_market_button"):
-            final_commodity_name = commodity_name_input if not commodity_name and commodity_name_input else commodity_name
-
-            if final_commodity_name and year:
-                if USDA_API_AVAILABLE:
-                    with st.spinner(f"Fetching market data for {final_commodity_name} ({year})..."):
-                        market_data = get_usda_market_data(final_commodity_name, year, state_alpha if state_alpha else None)
-
-                    if market_data:
-                        st.subheader(f"USDA Price Data for {final_commodity_name.upper()} - {year} {('(' + state_alpha + ')' if state_alpha else '(National)')}")
-                        if market_data: # Check if list is not empty
-                            for entry in market_data:
-                                st.markdown(f"- **{entry['description']}**: {entry['value']} {entry['unit']} (Period: {entry['period']}, Domain: {entry['domain']}, State: {entry['state']})")
-                        else: # List is empty but not None (meaning API call was made but no specific data)
-                             st.info(f"No specific 'PRICE RECEIVED' data found for {final_commodity_name} in {year} {('for state ' + state_alpha) if state_alpha else 'at national level'}. The API might return other related stats under different categories, or the query needs refinement for this specific commodity.")
-                    elif market_data is None: # API call failed or key missing
-                        st.error("Failed to retrieve data. Check API key or network.")
-                    # else: market_data is an empty list, message already handled by get_usda_market_data or above
-
-                elif OPENAI_AVAILABLE: # Fallback to OpenAI if USDA key missing but OpenAI is available
-                    st.info("USDA API Key not available. Attempting to get general market insights using OpenAI...")
-                    prompt = f"Provide general market insights for {final_commodity_name}"
-                    if state_alpha:
-                        prompt += f" in {state_alpha} (US state)" # Clarify context for OpenAI
-                    prompt += f" for the year {year}."
-                    with st.spinner("Fetching insights with OpenAI..."):
-                        insights = get_openai_response(prompt)
-                        st.subheader(f"General Market Insights for {final_commodity_name} (from OpenAI):")
-                        st.markdown(insights)
-                else: # Neither API is available
-                    st.error("Both USDA and OpenAI API keys are unavailable. Cannot fetch market insights.")
-            else:
-                st.error("Please enter a commodity name and year.")
-
-    elif page == "Sustainable Farming Practices":
-        st.header("🌿 Sustainable Farming Practices")
-        st.write("Learn about sustainable farming techniques and get advice.")
-
-        sustainable_query = st.text_area("Ask a question about sustainable farming practices:", height=150, key="sustainable_query")
-
-        if st.button("Get Sustainable Farming Advice", key="sustainable_button"):
-            if sustainable_query:
-                prompt = f"Regarding sustainable farming, what about: {sustainable_query}?"
-                with st.spinner("Fetching advice..."):
-                    advice = get_openai_response(prompt)
-                    st.subheader("Sustainable Farming Advice:")
-                    st.markdown(advice)
-            else:
-                st.error("Please enter your question or topic.")
-
-    st.sidebar.markdown("---")
-    st.sidebar.info("Powered by AI and Data")
+        # Add assistant response to chat history
+        st.session_state.messages.append({"role": "assistant", "content": response})
 
 if __name__ == "__main__":
     main()
