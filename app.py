@@ -14,7 +14,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        gemini_model = genai.GenerativeModel('gemini-pro')
+        gemini_model = genai.GenerativeModel('gemini-1.0-pro') # Updated model name
         GEMINI_AVAILABLE = True
     except Exception as e:
         st.error(f"Error configuring Gemini API: {e}")
