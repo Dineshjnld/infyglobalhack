@@ -289,7 +289,7 @@ def get_soil_data(latitude, longitude):
     return soil_results if soil_results else None
 
 
-def get_openai_response(prompt_text, model="gpt-3.5-turbo"):
+def get_openai_response(prompt_text, model="gpt-4o-mini"): # Changed default model
     """
     Sends a prompt to the OpenAI API and returns the response.
     Uses a mocked response if the API is not available or if openai_client is None.

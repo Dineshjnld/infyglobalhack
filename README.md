@@ -8,8 +8,8 @@ AgriGuru is now a conversational AI chatbot designed to provide intelligent agri
 *   **Location-Specific Advice:** Set your village/location to get tailored advice. AgriGuru uses this for:
     *   **Weather Conditions:** Fetches current weather using the Open-Meteo API.
     *   **Soil Data:** Retrieves estimated soil properties (pH, organic carbon, texture, etc.) for your location from ISRIC SoilGrids.
-    *   **Personalized Recommendations:** OpenAI (GPT-3.5 Turbo) synthesizes information from these APIs along with your query to provide advice on crop selection, sustainable practices, and general agricultural questions.
-*   **Market Insights (India Focus via AI):** For queries about market prices or trends in India, AgriGuru leverages OpenAI's general knowledge, contextualized by your set location. Direct integration of a live Indian market data API was challenging for this phase.
+*   **Personalized Recommendations:** OpenAI (GPT-4o Mini) synthesizes information from these APIs along with your query to provide advice on crop selection, sustainable practices, and general agricultural questions.
+*   **Market Insights (India Focus via AI):** For queries about market prices or trends in India, AgriGuru leverages OpenAI's general knowledge (GPT-4o Mini), contextualized by your set location. Direct integration of a live Indian market data API was challenging for this phase.
 *   **USDA Market Data (Optional for US):** The underlying code for USDA NASS API access for US market data is still present but not actively used in the primary chat flow unless specifically triggered by very precise keywords (this explicit triggering is not fully fleshed out in the chat demo).
 
 ## How It Works
@@ -19,8 +19,8 @@ AgriGuru is now a conversational AI chatbot designed to provide intelligent agri
 3.  **Information Gathering (Orchestration):** Based on your query and location, AgriGuru's backend may:
     *   Fetch current weather from Open-Meteo.
     *   Fetch estimated soil data from ISRIC SoilGrids.
-4.  **AI Synthesis:** The collected data (if any) along with your query and location are sent to OpenAI (GPT-3.5 Turbo).
-5.  **Response:** AgriGuru provides an answer synthesized by OpenAI, incorporating the fetched data and its general agricultural knowledge. If specific live data (like hyper-local market prices) isn't available from APIs, the AI will use its broader knowledge for your region.
+4.  **AI Synthesis:** The collected data (if any) along with your query and location are sent to OpenAI (GPT-4o Mini).
+5.  **Response:** AgriGuru provides an answer synthesized by OpenAI (GPT-4o Mini), incorporating the fetched data and its general agricultural knowledge. If specific live data (like hyper-local market prices) isn't available from APIs, the AI will use its broader knowledge for your region.
 
 ## Setup and Installation
 
@@ -47,7 +47,7 @@ AgriGuru is now a conversational AI chatbot designed to provide intelligent agri
         OPENAI_API_KEY="YOUR_ACTUAL_OPENAI_API_KEY"
         USDA_API_KEY="YOUR_ACTUAL_USDA_NASS_API_KEY"
         ```
-    *   **`OPENAI_API_KEY`**: Obtain this from [OpenAI Platform](https://platform.openai.com/api-keys). This is essential for the AI's conversational abilities and for synthesizing information. The application uses the GPT-3.5 Turbo model.
+    *   **`OPENAI_API_KEY`**: Obtain this from [OpenAI Platform](https://platform.openai.com/api-keys). This is essential for the AI's conversational abilities and for synthesizing information. The application now uses the `gpt-4o-mini` model by default.
     *   **`USDA_API_KEY`**: Obtain this from the [USDA NASS QuickStats API website](https://quickstats.nass.usda.gov/api) (it's free). This is currently optional and primarily for US-specific market data if explicitly queried in a way the (not fully implemented) USDA trigger understands.
 
     If the `OPENAI_API_KEY` is not provided or is invalid, the chatbot will not be able to provide AI-generated responses and will show an error or limited mocked replies.
@@ -76,7 +76,7 @@ AgriGuru is now a conversational AI chatbot designed to provide intelligent agri
     *   "Tell me about sustainable farming practices for [crop name]."
     *   "What are the general market trends for rice in India?"
 
-**Note:** The quality and specificity of AI responses depend on the clarity of your questions, the set location, and the data retrieved from the integrated APIs (Open-Meteo for weather, ISRIC SoilGrids for estimated soil properties). For Indian market data, the bot currently uses OpenAI's general knowledge based on your location.
+**Note:** The quality and specificity of AI responses depend on the clarity of your questions, the set location, and the data retrieved from the integrated APIs (Open-Meteo for weather, ISRIC SoilGrids for estimated soil properties). For Indian market data, the bot currently uses OpenAI's general knowledge (via GPT-4o Mini) based on your location.
 
 ## Future Development Ideas
 
